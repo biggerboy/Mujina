@@ -40,7 +40,10 @@ public class UserController {
     }
 
     @GetMapping("/login")
-    public String login(ModelMap modelMap) {
+    public String login(ModelMap modelMap, Authentication authentication) {
+        if (authentication != null) {
+            return "redirect:/user.html";
+        }
         modelMap.addAttribute("samlAttributes", samlAttributes);
         return "login";
     }
