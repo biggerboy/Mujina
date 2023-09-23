@@ -2,12 +2,18 @@ package mujina.sp;
 
 import mujina.saml.KeyStoreLocator;
 import mujina.saml.ProxiedSAMLContextProviderLB;
+import org.apache.commons.httpclient.HttpClient;
+import org.apache.commons.httpclient.MultiThreadedHttpConnectionManager;
 import org.apache.velocity.app.VelocityEngine;
+import org.opensaml.saml2.metadata.provider.HTTPMetadataProvider;
 import org.opensaml.saml2.metadata.provider.MetadataProvider;
 import org.opensaml.saml2.metadata.provider.MetadataProviderException;
 import org.opensaml.xml.parse.ParserPool;
 import org.opensaml.xml.parse.StaticBasicParserPool;
 import org.opensaml.xml.parse.XMLParserException;
+import org.springframework.beans.factory.DisposableBean;
+import org.springframework.beans.factory.InitializingBean;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.ServletContextInitializer;
@@ -53,14 +59,20 @@ import java.security.spec.InvalidKeySpecException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Timer;
 
 @Configuration
 @EnableWebSecurity
 @EnableGlobalMethodSecurity(securedEnabled = true)
-public class WebSecurityConfigurer extends WebSecurityConfigurerAdapter {
+public class WebSecurityConfigurer extends WebSecurityConfigurerAdapter implements InitializingBean, DisposableBean {
 
     @Value("${sp.idp_metadata_url}")
     private String identityProviderMetadataUrl;
+    @Value("${sp.idp_remote_metadata_url}")
+    private String idpSSOCircleMetadataURL;
+
+    @Value("${sp.use_idp_local_metadata_url}")
+    private boolean useIdentityProviderMetadataUrl;
 
     @Value("${sp.base_url}")
     private String spBaseUrl;
@@ -82,9 +94,19 @@ public class WebSecurityConfigurer extends WebSecurityConfigurerAdapter {
 
     @Value("${secure_cookie}")
     private boolean secureCookie;
-
+    @Autowired
+    private HttpClient httpClient;
     private final DefaultResourceLoader defaultResourceLoader = new DefaultResourceLoader();
-
+    private Timer backgroundTaskTimer;
+    private MultiThreadedHttpConnectionManager multiThreadedHttpConnectionManager;
+    public void init() {
+        this.backgroundTaskTimer = new Timer(true);
+        this.multiThreadedHttpConnectionManager = new MultiThreadedHttpConnectionManager();
+    }
+    @Override
+    public void afterPropertiesSet() throws Exception {
+        init();
+    }
     @Bean
     public SAMLAuthenticationProvider samlAuthenticationProvider() {
         SAMLAuthenticationProvider samlAuthenticationProvider = new RoleSAMLAuthenticationProvider();
@@ -204,10 +226,19 @@ public class WebSecurityConfigurer extends WebSecurityConfigurerAdapter {
 
     @Bean
     public MetadataProvider identityProvider() throws MetadataProviderException, XMLParserException {
-        Resource resource = defaultResourceLoader.getResource(identityProviderMetadataUrl);
-        ResourceMetadataProvider resourceMetadataProvider = new ResourceMetadataProvider(resource);
-        resourceMetadataProvider.setParserPool(parserPool());
-        ExtendedMetadataDelegate extendedMetadataDelegate = new ExtendedMetadataDelegate(resourceMetadataProvider, extendedMetadata());
+        MetadataProvider metadataProvider = null;
+        if (useIdentityProviderMetadataUrl) {
+            Resource resource = defaultResourceLoader.getResource(identityProviderMetadataUrl);
+            ResourceMetadataProvider resourceMetadataProvider = new ResourceMetadataProvider(resource);
+            resourceMetadataProvider.setParserPool(parserPool());
+            metadataProvider = resourceMetadataProvider;
+        } else {
+            HTTPMetadataProvider httpMetadataProvider =
+                    new HTTPMetadataProvider(backgroundTaskTimer, httpClient, idpSSOCircleMetadataURL);
+            httpMetadataProvider.setParserPool(parserPool());
+            metadataProvider = httpMetadataProvider;
+        }
+        ExtendedMetadataDelegate extendedMetadataDelegate = new ExtendedMetadataDelegate(metadataProvider, extendedMetadata());
         extendedMetadataDelegate.setMetadataTrustCheck(true);
         extendedMetadataDelegate.setMetadataRequireSignature(true);
         return extendedMetadataDelegate;
@@ -258,6 +289,15 @@ public class WebSecurityConfigurer extends WebSecurityConfigurerAdapter {
         KeyStore keyStore = KeyStoreLocator.createKeyStore(spPassphrase);
         KeyStoreLocator.addPrivateKey(keyStore, spEntityId, spPrivateKey, spCertificate, spPassphrase);
         return new JKSKeyManager(keyStore, Collections.singletonMap(spEntityId, spPassphrase), spEntityId);
+    }
+    @Override
+    public void destroy() {
+        shutdown();
+    }
+    public void shutdown() {
+        this.backgroundTaskTimer.purge();
+        this.backgroundTaskTimer.cancel();
+        this.multiThreadedHttpConnectionManager.shutdown();
     }
 
 }

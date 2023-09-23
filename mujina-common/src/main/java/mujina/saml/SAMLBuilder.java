@@ -9,7 +9,9 @@ import org.opensaml.xml.io.MarshallingException;
 import org.opensaml.xml.schema.XSAny;
 import org.opensaml.xml.schema.XSString;
 import org.opensaml.xml.schema.impl.XSStringBuilder;
+import org.opensaml.xml.security.SecurityException;
 import org.opensaml.xml.security.credential.Credential;
+import org.opensaml.xml.security.keyinfo.KeyInfoGenerator;
 import org.opensaml.xml.signature.*;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
@@ -117,17 +119,23 @@ public class SAMLBuilder {
         return assertion;
     }
 
-    public static void signAssertion(SignableXMLObject signableXMLObject, Credential signingCredential) throws MarshallingException, SignatureException {
+    public static void signAssertion(SignableXMLObject signableXMLObject, Credential signingCredential, KeyInfoGenerator keyInfoGenerator) throws MarshallingException, SignatureException, SecurityException {
         Signature signature = buildSAMLObject(Signature.class, Signature.DEFAULT_ELEMENT_NAME);
 
         signature.setSigningCredential(signingCredential);
         signature.setSignatureAlgorithm(Configuration.getGlobalSecurityConfiguration().getSignatureAlgorithmURI(signingCredential));
         signature.setCanonicalizationAlgorithm(SignatureConstants.ALGO_ID_C14N_EXCL_OMIT_COMMENTS);
+        if(keyInfoGenerator != null){
+            signature.setKeyInfo(keyInfoGenerator.generate(signingCredential));
+        }
 
         signableXMLObject.setSignature(signature);
 
         Configuration.getMarshallerFactory().getMarshaller(signableXMLObject).marshall(signableXMLObject);
         Signer.signObject(signature);
+    }
+    public static void signAssertion(SignableXMLObject signableXMLObject, Credential signingCredential) throws MarshallingException, SignatureException, SecurityException {
+        signAssertion(signableXMLObject,signingCredential,null);
     }
 
 

@@ -96,7 +96,7 @@ public class SAMLMessageHandler {
     }
 
     @SuppressWarnings("unchecked")
-    public void sendAuthnResponse(SAMLPrincipal principal, HttpServletResponse response) throws MarshallingException, SignatureException, MessageEncodingException {
+    public void sendAuthnResponse(SAMLPrincipal principal, HttpServletResponse response) throws MarshallingException, SignatureException, MessageEncodingException, SecurityException {
         Status status = buildStatus(StatusCode.SUCCESS_URI);
 
         String entityId = idpConfiguration.getEntityId();

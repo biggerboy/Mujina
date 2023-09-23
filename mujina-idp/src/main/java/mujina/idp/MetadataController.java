@@ -15,9 +15,7 @@ import org.opensaml.xml.security.credential.UsageType;
 import org.opensaml.xml.security.criteria.EntityIDCriteria;
 import org.opensaml.xml.security.keyinfo.KeyInfoGenerator;
 import org.opensaml.xml.security.x509.X509KeyInfoGeneratorFactory;
-import org.opensaml.xml.signature.Signature;
-import org.opensaml.xml.signature.SignatureConstants;
-import org.opensaml.xml.signature.SignatureException;
+import org.opensaml.xml.signature.*;
 import org.opensaml.xml.util.XMLHelper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -93,7 +91,7 @@ public class MetadataController {
 
         entityDescriptor.getRoleDescriptors().add(idpssoDescriptor);
 
-        signAssertion(entityDescriptor, credential);
+        signAssertion(entityDescriptor, credential, keyInfoGenerator);
 
         return writeEntityDescriptor(entityDescriptor);
     }
